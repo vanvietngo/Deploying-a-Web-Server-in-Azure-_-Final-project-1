@@ -101,43 +101,76 @@ resource "azurerm_network_interface_backend_address_pool_association" "nic_adr_p
   backend_address_pool_id = azurerm_lb_backend_address_pool.lb_adr_pool.id
 }
 
-# Create a network security group
-resource "azurerm_network_security_group" "nsg" {
-  name                = "${var.prefix}-nsg"
-  location            = azurerm_resource_group.resource_group.location
-  resource_group_name = azurerm_resource_group.resource_group.name
-
-  security_rule {
-    name                        = "AllowVNetInboundTraffic"
-    priority                    = 4080
-    direction                   = "Inbound"
-    access                      = "Allow"
-    protocol                    = "*"
-    source_port_range           = "*"
-    destination_port_range      = "*"
-    source_address_prefix       = "10.0.0.0/16"
-    destination_address_prefix  = "10.0.0.0/16"
-    #resource_group_name         = azurerm_resource_group.resource_group.name
-    #network_security_group_name = azurerm_network_security_group.nsg.name
-  }
-
-  security_rule {
-    name                        = "DenyAllOtherInbound"
-    priority                    = 4090
-    direction                   = "Inbound"
-    access                      = "Deny"
-    protocol                    = "*"
-    source_port_range           = "*"
-    destination_port_range      = "*"
-    source_address_prefix       = "0.0.0.0/0"
-    destination_address_prefix  = "10.0.0.0/16"
-    #resource_group_name         = azurerm_resource_group.resource_group.name
-    #network_security_group_name = azurerm_network_security_group.nsg.name
-  }
+# Create network security group
+resource "azurerm_network_security_group" "web-server-rg" {
+  name                = "web-server-rg"
+  location            = var.resource_group_location
+  resource_group_name = var.resource_group_name
 
   tags = {
-    environment = "Development"
+    environment = var.default_environment
   }
+}
+
+
+# Deny Inbound Traffic from the Internet:
+resource "azurerm_network_security_rule" "deny_internet" {
+  name                        = "deny_internet"
+  priority                    = 121
+  direction                   = "Inbound"
+  access                      = "Deny"
+  protocol                    = "*"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.web-server-rg.name
+}
+
+# Allow traffic within the Same Virtual Network
+resource "azurerm_network_security_rule" "allow_internal_inbound" {
+  name                        = "allow_internal_inbound"
+  priority                    = 120
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "*"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = "VirtualNetwork"
+  destination_address_prefix  = "VirtualNetwork"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.web-server-rg.name
+}
+
+# Allow HTTP Traffic from the Load Balancer to the VMs
+resource "azurerm_network_security_rule" "allow_inbound_lb" {
+  name                        = "allow_lb_inbound"
+  priority                    = 130
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "*"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = "AzureLoadBalancer"
+  destination_address_prefix  = "VirtualNetwork"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.web-server-rg.name
+}
+
+# Allow outbound traffic within the Same Virtual Network
+resource "azurerm_network_security_rule" "allow_internal_outbound" {
+  name                        = "allow_internal_outbound"
+  priority                    = 100
+  direction                   = "Outbound"
+  access                      = "Allow"
+  protocol                    = "*"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = "VirtualNetwork"
+  destination_address_prefix  = "VirtualNetwork"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.web-server-rg.name
 }
 
 # Create a virtual machine availability set
